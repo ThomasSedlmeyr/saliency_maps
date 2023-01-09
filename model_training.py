@@ -1,3 +1,4 @@
+import cv2
 import tensorflow as tf
 from tensorflow.keras.models import Sequential
 from tensorflow.keras import layers
@@ -7,6 +8,11 @@ import numpy as np
 from os import listdir
 import os
 from tensorflow.keras import models
+from PIL import Image
+
+
+from GradientBasedCAMs import generateGradCamImage, superimpose, generateSaliencyMapsForEveryClass, \
+    saveMultipleSaliencyMapsForEveryClass
 
 IMG_SIZE = 224
 
@@ -28,6 +34,8 @@ img_augmentation = Sequential(
     ],
     name="img_augmentation",
 )
+
+
 def build_model(num_classes=2):
     inputs = tf.keras.layers.Input(shape=(IMG_SIZE, IMG_SIZE, 3))
     #x = img_augmentation(inputs)
@@ -50,6 +58,8 @@ def build_model(num_classes=2):
     model.compile(
         optimizer=optimizer, loss="categorical_crossentropy", metrics=["accuracy"],
     )
+    
+    model.summary()
     return model
 
 
@@ -120,8 +130,8 @@ def plot_hist(hist):
 
 
 def create_numpy_ds():
-    from keras.preprocessing.image import load_img
-    from keras.preprocessing.image import img_to_array
+    from keras.utils import load_img
+    from keras.utils import img_to_array
 
     print("Servus!")
     # define location of dataset
@@ -141,7 +151,7 @@ def create_numpy_ds():
         # store
         photos.append(photo)
         labels.append(output)
-        if counter == 4000:
+        if counter == 10000:
             break
         counter += 1
 
@@ -177,19 +187,69 @@ def read_numpy_dataSet(name_prefix, name_postfix):
     y_train = np.load(name_prefix + 'y_train' + name_postfix)
     y_test = np.load(name_prefix + 'y_test' + name_postfix)
 
+    # TODO tensoren sind kacke für die bilder
+
     return tf.convert_to_tensor(x_train), tf.convert_to_tensor(x_test), \
         tf.convert_to_tensor(y_train), tf.convert_to_tensor(y_test)
     #return x_train, x_test, y_train, y_test
 
+
+def plotCAMimage(grad_cam_superimposed, originalImage, outputName):
+    plt.figure(figsize=(12, 5))
+    ax = plt.subplot(1, 2, 1)
+    plt.imshow(originalImage)
+    plt.axis('off')
+    plt.title(outputName)
+    ax = plt.subplot(1, 2, 2)
+    plt.imshow(grad_cam_superimposed)
+    plt.axis('off')
+    plt.title('Conv_1 Grad-CAM heat-map')
+    plt.tight_layout()
+    plt.savefig(outputName + ".png")
+
+
+labels = ["cat", "dog"]
+
 #create_numpy_ds()
 #create_train_test_numpy()
+#print(tf.version.VERSION)
 
 x_train, x_test, y_train, y_test = read_numpy_dataSet("data_set/", "_small.npy")
 
 #unfreeze_model(model)
 
 #epochs = 10  # @param {type: "slider", min:8, max:50}
-model = build_model(2)
+#model = build_model(2)
 #model = create_own_model()
-hist = model.fit(x=x_test, y=y_test, epochs=10, validation_split=0.1, verbose=2, batch_size=2, use_multiprocessing=True, workers=8)
+#hist = model.fit(x=x_train, y=y_train, epochs=1, validation_split=0.1, verbose=1, batch_size=2, use_multiprocessing=True, workers=8)
+#model.evaluate(x_test, y_test)
+#model.save("saved_models/test")
+
+#name: top_conv
+
+model = models.load_model("saved_models/test")
+#model.evaluate(x_test, y_test)
+
+input_image = x_test[0]
+#cam_image = generateGradCamImage(model, input_image, "top_conv", eps=1e-8, method="gradCAM", useInterpolation=False,
+#                         indexOutputClass=1)
+
+
+#input_image = cv2.cvtColor(np.array(input_image), cv2.COLOR_RGB2BGR)
+#plotCAMimage(cam_image, input_image, "test")
+#superimposed_img = superimpose(input_image, cam_image, 0.3, emphasize=False)
+#plotCAMimage(superimposed_img, input_image, "test_2")
+
+
+cams = generateSaliencyMapsForEveryClass(model, "top_conv", "gradCAM", x_test[:10], numberClasses=2)
+
+saveMultipleSaliencyMapsForEveryClass(cams, labels, x_test[:10])
+
+#for i in range(10):
+#    input_image = x_test[i].numpy()
+#    input_image = input_image.astype(np.uint8)
+#    superimposed_img = superimpose(input_image, cams[i], 0.3, emphasize=True)
+#    plotCAMimage(superimposed_img, input_image, "cam_" + str(i))
+
+print("Test")
 #plot_hist(hist)

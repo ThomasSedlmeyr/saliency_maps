@@ -11,12 +11,10 @@ import numpy as np
 from tensorflow.python.keras.utils.data_utils import Sequence
 import tensorflow as tf
 
-from DatabaseGeneration.DatabaseGenerator import getTrainingsDataHeightsDatabase, loadNumpyDataSet
 from PIL import Image
 import random
 from itertools import product
 
-from LearnFromParameters.ModelEvaluation import evaluatePredictions
 from SaliencyMetrics import *
 
 """
@@ -50,6 +48,9 @@ def generateGradCamImage(model, img_array, layer_name, eps=1e-8, method="gradCAM
     Returns:
         The resulting GradCam image
     """
+
+    # We need to add an additional dimension to get a batch
+    img_array = np.expand_dims(img_array, axis=0)
 
     gradModel = tf.keras.models.Model(
         inputs=[model.inputs],
@@ -206,26 +207,26 @@ def convertTraingDataToRGBimage2(imgArray):
     return convertedImage_rgb
 
 
-def generateCAMsWithDifferentMethods(nameOfLastHiddenLayer, imageDataInput, outputName="cam"):
+def generateCAMsWithDifferentMethods(model, nameOfLastHiddenLayer, imageDataInput, outputName="cam", indexOutputClass=0):
     originalImage = convertTrainingsDataToRGBimage(imageDataInput)
 
     grad_cam = generateGradCamImage(model, np.expand_dims(imageDataInput, axis=0), nameOfLastHiddenLayer,
-                                    method="hiResCAM", useInterpolation=True)
+                                    method="hiResCAM", useInterpolation=True, indexOutputClass=0)
     grad_cam_superimposed = superimpose(originalImage, grad_cam, 0.3, emphasize=False)
     plotCAMimage(grad_cam_superimposed, originalImage, outputName + "_hiResCAM_interpolation")
 
     grad_cam = generateGradCamImage(model, np.expand_dims(imageDataInput, axis=0), nameOfLastHiddenLayer,
-                                    method="layerCAM", useInterpolation=True)
+                                    method="layerCAM", useInterpolation=True, indexOutputClass=0)
     grad_cam_superimposed = superimpose(originalImage, grad_cam, 0.3, emphasize=False)
     plotCAMimage(grad_cam_superimposed, originalImage, outputName + "_layerCAM_interpolation")
 
     grad_cam = generateGradCamImage(model, np.expand_dims(imageDataInput, axis=0), nameOfLastHiddenLayer,
-                                    method="gradCAM", useInterpolation=True)
+                                    method="gradCAM", useInterpolation=True, indexOutputClass=0)
     grad_cam_superimposed = superimpose(originalImage, grad_cam, 0.3, emphasize=False)
     plotCAMimage(grad_cam_superimposed, originalImage, outputName + "_gradCAM_interpolation")
 
     grad_cam = generateGradCamImage(model, np.expand_dims(imageDataInput, axis=0), nameOfLastHiddenLayer,
-                                    method="gradCAM_posGrads", useInterpolation=True)
+                                    method="gradCAM_posGrads", useInterpolation=True, indexOutputClass=0)
     grad_cam_superimposed = superimpose(originalImage, grad_cam, 0.3, emphasize=False)
     plotCAMimage(grad_cam_superimposed, originalImage, outputName + "_gradCAM_posGrads_interpolation")
 
@@ -233,30 +234,6 @@ def generateCAMsWithDifferentMethods(nameOfLastHiddenLayer, imageDataInput, outp
     # grad_cam_superimposed = superimpose(originalImage, grad_cam, 0.3, emphasize=False)
     # plotCAMimage(grad_cam_superimposed, originalImage, outputName+ "_HiRes_CAM_no_interpolation")
 
-
-def saveCAMImagesOnly(nameOfLastHiddenLayer, imageDataInput, outputName="cam"):
-    originalImage = convertTrainingsDataToRGBimage(imageDataInput)
-    saveArrayAsImage(originalImage, outputName + "_original")
-
-    grad_cam = generateGradCamImage(model, np.expand_dims(imageDataInput, axis=0), nameOfLastHiddenLayer,
-                                    method="hiResCAM", useInterpolation=False)
-    grad_cam_superimposed = superimpose(originalImage, grad_cam, 0.3, emphasize=False)
-    saveArrayAsImage(grad_cam_superimposed, outputName + "_hiResCAM_interpolation")
-
-    grad_cam = generateGradCamImage(model, np.expand_dims(imageDataInput, axis=0), nameOfLastHiddenLayer,
-                                    method="layerCAM", useInterpolation=False)
-    grad_cam_superimposed = superimpose(originalImage, grad_cam, 0.3, emphasize=False)
-    saveArrayAsImage(grad_cam_superimposed, outputName + "_layerCAM_interpolation")
-
-    grad_cam = generateGradCamImage(model, np.expand_dims(imageDataInput, axis=0), nameOfLastHiddenLayer,
-                                    method="gradCAM", useInterpolation=False)
-    grad_cam_superimposed = superimpose(originalImage, grad_cam, 0.3, emphasize=False)
-    saveArrayAsImage(grad_cam_superimposed, outputName + "_gradCAM_interpolation")
-
-    grad_cam = generateGradCamImage(model, np.expand_dims(imageDataInput, axis=0), nameOfLastHiddenLayer,
-                                    method="gradCAM_posGrads", useInterpolation=False)
-    grad_cam_superimposed = superimpose(originalImage, grad_cam, 0.3, emphasize=False)
-    saveArrayAsImage(grad_cam_superimposed, outputName + "_gradCAM_posGrads_interpolation")
 
 
 def plotCAMimage(grad_cam_superimposed, originalImage, outputName):
@@ -280,20 +257,52 @@ def saveArrayAsImage(arr, imageName):
     imgRescaled.save(imageName + '.png')
 
 
-def generateSaliencyMaps(model, nameOfLastHiddenLayer, nameOfMethod, testData):
+def generateSaliencyMapsForOneClass(model, nameOfLastHiddenLayer, nameOfMethod, testData, indexOutputClass=0):
     saliencyMaps = []
     counter = 0
     for testImage in testData:
-        saliencyMap = generateGradCamImage(model, np.expand_dims(testImage, axis=0),
+        saliencyMap = generateGradCamImage(model, testImage,
                                            nameOfLastHiddenLayer,
                                            method=nameOfMethod,
-                                           useInterpolation=True)
+                                           useInterpolation=True,
+                                           indexOutputClass=0)
         saliencyMaps.append(saliencyMap)
         counter += 1
 
     return saliencyMaps
 
 
+def generateSaliencyMapsForEveryClass(model, nameOfLastHiddenLayer, nameOfMethod, testData, numberClasses=1):
+    saliencyMaps = []
+    counter = 0
+    for testImage in testData:
+        saliencyMapsPerClass = []
+        for i in range(numberClasses):
+                saliencyMap = generateGradCamImage(model, testImage,
+                                                   nameOfLastHiddenLayer,
+                                                   method=nameOfMethod,
+                                                   useInterpolation=True,
+                                                   indexOutputClass=i)
+                saliencyMapsPerClass.append(saliencyMap)
+                counter += 1
+        saliencyMaps.append(saliencyMapsPerClass)
+    return saliencyMaps
+
+
+def saveMultipleSaliencyMapsForEveryClass(cams, labels, inputData):
+    i = 0
+    for camsForOneClass in cams:
+        j = 0
+        for currentCam in camsForOneClass:
+            input_image = inputData[i].numpy()
+            input_image = input_image.astype(np.uint8)
+            superimposed_img = superimpose(input_image, currentCam, 0.3, emphasize=False)
+            plotCAMimage(superimposed_img, input_image, "cam_" + str(i) + labels[j])
+            j += 1
+        i += 1
+
+
+"""
 os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
 
 domainResolution = 32
@@ -436,3 +445,4 @@ for i in range(3):
 
 # for i in range(5):
 #    saveCAMImagesOnly("secondConv", xTrain[i], "cam2_no_interpol_" + str(i))
+"""

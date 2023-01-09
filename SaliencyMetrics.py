@@ -3,7 +3,7 @@ from itertools import product
 import random
 import numpy as np
 
-from DatabaseGeneration.RoughnessTransformer import moveDomain
+
 
 """
 This file contains routines for the evaluation of certain CAMs (Class Activation maps)
