@@ -133,7 +133,7 @@ def create_numpy_ds():
     from keras.utils import load_img
     from keras.utils import img_to_array
 
-    print("servus!")
+
     # define location of dataset
     folder = '/home/thomas/downloads/dogs-vs-cats/train/'
     photos, labels = list(), list()
@@ -228,6 +228,7 @@ x_train, x_test, y_train, y_test = read_numpy_data_set("../data_set/", "_small.n
 #name: top_conv
 
 model = models.load_model("../saved_models/test")
+model.summary()
 #model.evaluate(x_test, y_test)
 
 input_image = x_test[0]
@@ -241,7 +242,7 @@ input_image = x_test[0]
 #plot_camimage(superimposed_img, input_image, "test_2")
 
 
-cams = generate_saliency_maps_for_every_class(model, "top_conv", "grad_cam", x_test[:10], number_classes=2)
+cams = generate_saliency_maps_for_every_class(model, "top_conv", "hi_res_cam", x_test[:10], number_classes=2)
 
 save_multiple_saliency_maps_for_every_class(cams, labels, x_test[:10])
 

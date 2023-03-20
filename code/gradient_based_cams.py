@@ -66,65 +66,43 @@ def generate_grad_cam_image(model, img_array, layer_name, eps=1e-8, method="grad
 
     # use automatic differentiation to compute the gradients
     grads = tape.gradient(loss, conv_outputs)
+    grads = grads[0]
+    conv_outputs = conv_outputs[0]
 
-    v3 = conv_outputs.numpy()
-
-    # compute the guided gradients
-    # cast_conv_outputs = tf.cast(conv_outputs > 0, "float32")
-    # cast_grads = tf.cast(grads > 0, "float32")
-
-    # calculates the cam using the algorithm hi_res-cam
     if method == "hi_res_cam":
-        outputs_numpy = conv_outputs.numpy()
-        grad_numpy = grads.numpy()
-        guided_grads = outputs_numpy * grad_numpy
-        # the convolution and guided gradients have a batch dimension
-        # (which we don't need) so let's grab the volume itself and
-        # discard the batch
-        conv_outputs = conv_outputs[0]
-        guided_grads = guided_grads[0]
-        multiplied_gradients_and_features = tf.multiply(guided_grads, conv_outputs)
-        cam = tf.reduce_mean(multiplied_gradients_and_features, axis=(-1))
-        # cam = tf.nn.relu(cam1)
-        # if np.array_equal(cam1.numpy(), cam.numpy()):
-        #    print("cams are equal")
+        multiplied_gradients_and_features = tf.multiply(grads, conv_outputs)
+        cam = tf.reduce_sum(multiplied_gradients_and_features, axis=(-1))
 
     # calculates the cam using an adapted version of hi_res-cam
-    # applying the re_lu-function on the gradients before the multiplitcation
+    # applying the re_lu-function on the gradients before the multiplication
     # with the activation map
     elif method == "layer_cam":
         cast_grads = tf.cast(grads > 0, "float32")
-        guided_grads = conv_outputs * (grads * cast_grads)
-        conv_outputs = conv_outputs[0]
-        guided_grads = guided_grads[0]
+        guided_grads = grads * cast_grads
         multiplied_gradients_and_features = tf.multiply(guided_grads, conv_outputs)
-        cam = tf.reduce_mean(multiplied_gradients_and_features, axis=(-1))
-        # cam = tf.nn.relu(cam1)
-        # if np.array_equal(cam1.numpy(), cam.numpy()):
-        #    print("cams are equal")
+        cam = tf.reduce_sum(multiplied_gradients_and_features, axis=(-1))
 
     # calculates the cam using the grad-cam algorithm
     elif method == "grad_cam":
-        guided_grads = conv_outputs * grads
-        conv_outputs = conv_outputs[0]
-        guided_grads = guided_grads[0]
-        weights = tf.reduce_mean(guided_grads, axis=(0, 1))
+        weights = tf.reduce_mean(grads, axis=(0, 1))
         cam = tf.reduce_sum(tf.multiply(weights, conv_outputs), axis=-1)
-        # cam = tf.nn.relu(cam1)
-        # if np.array_equal(cam1.numpy(), cam.numpy()):
+        #Check that we get the same results as in the keras code
+        #pooled_grads = tf.reduce_mean(grads, axis=(0, 1))
+        #last_conv_layer_output = conv_outputs
+        #heatmap = last_conv_layer_output @ pooled_grads[..., tf.newaxis]
+        #heatmap = tf.squeeze(heatmap)
+        #arr1 = cam.numpy().round(3)
+        #arr2 = heatmap.numpy().round(3)
+        #if np.array_equal(arr1, arr2):
         #    print("cams are equal")
 
     # like the grad cam algorithm but using only the positive gradients
     elif method == "grad_cam_pos_grads":
         cast_grads = tf.cast(grads > 0, "float32")
-        guided_grads = conv_outputs * (grads * cast_grads)
-        conv_outputs = conv_outputs[0]
-        guided_grads = guided_grads[0]
+        guided_grads = grads * cast_grads
         weights = tf.reduce_mean(guided_grads, axis=(0, 1))
         cam = tf.reduce_sum(tf.multiply(weights, conv_outputs), axis=-1)
-        # cam = tf.nn.relu(cam1)
-        # if np.array_equal(cam1.numpy(), cam.numpy()):
-        #    print("cams are equal")
+
     else:
         print("method \"" + method + "\" is not suppoerted")
 
@@ -298,7 +276,7 @@ def save_multiple_saliency_maps_for_every_class(cams, labels, input_data):
             input_image = input_data[i].numpy()
             input_image = input_image.astype(np.uint8)
             superimposed_img = superimpose(input_image, current_cam, 0.3, emphasize=False)
-            plot_camimage(superimposed_img, input_image, "cam_" + str(i) + labels[j])
+            plot_camimage(superimposed_img, input_image, "cam_hires" + str(i) + labels[j])
             j += 1
         i += 1
 
